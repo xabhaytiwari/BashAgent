@@ -90,7 +90,22 @@ if __name__ == "__main__":
         )
 
         for event in events:
-            if "chatbot" in event:
-                print(f"AI: {event['chatbot']['messages'][-1].content}")
+            if "call_model" in event:
+                print(f"AI: {event['call_model']['messages'][-1].content}")
             if "tools" in event:
                 print(f"Tool Output: {event['tools']['messages'][-1].content}")
+        
+        # Human-in-the-Loop
+        snapshot = agent.get_state(config) # If agent is paused
+        if snapshot.next:
+            # Add step asking user for permission
+            user_approval = input("Agent wants to run a command. Approve? (y/n):")
+            if user_approval.lower() == 'y':
+                # Do the action
+                 for event in events:
+                    if "call_model" in event:
+                        print(f"AI: {event['call_model']['messages'][-1].content}")
+                    if "tools" in event:
+                        print(f"Tool Output: {event['tools']['messages'][-1].content}")
+            else:
+                print("Action Cancelled")
