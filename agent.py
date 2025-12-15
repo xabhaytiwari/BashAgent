@@ -72,7 +72,8 @@ if __name__ == "__main__":
     
     with sqlite3.connect("memory.db", check_same_thread=False) as conn:
         memory_saver = SqliteSaver(conn)
-        agent = builder.compile(checkpointer=memory_saver)
+        agent = builder.compile(checkpointer=memory_saver,
+                                interrupt_before=["tools"])
     
     # This config acts as the "Session ID"
     # Change 'thread_id' to start a fresh conversation
@@ -92,17 +93,15 @@ if __name__ == "__main__":
         for event in events:
             if "call_model" in event:
                 print(f"AI: {event['call_model']['messages'][-1].content}")
-            if "tools" in event:
-                print(f"Tool Output: {event['tools']['messages'][-1].content}")
         
         # Human-in-the-Loop
         snapshot = agent.get_state(config) # If agent is paused
-        if snapshot.next:
+        if snapshot.next: # contains the name of the next node
             # Add step asking user for permission
             user_approval = input("Agent wants to run a command. Approve? (y/n):")
             if user_approval.lower() == 'y':
                 # Do the action
-                 for event in events:
+                 for event in agent.stream(None, config=config):
                     if "call_model" in event:
                         print(f"AI: {event['call_model']['messages'][-1].content}")
                     if "tools" in event:
