@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import sys
 import os
 import sqlite3
 from dotenv import load_dotenv
@@ -69,45 +70,75 @@ builder.add_conditional_edges(
 
 builder.add_edge("tools", "call_model")
 
+def run_chat(user_input, agent, config):
+    """
+    Handles a single turn of coversation, including the Human-in-the-Loop check.
+    """
+    events = agent.stream(
+        {"messages": [HumanMessage(content=user_input)]},
+        config=config
+    )
+
+    for event in events:
+        if "call_model" in event:
+            print(f"AI: {event['call_model']['messages'][-1].content}")
+ 
+        # Human-in-the-Loop
+    snapshot = agent.get_state(config) # If agent is paused
+    if snapshot.next: # contains the name of the next node
+        # Add step asking user for permission
+        try:
+            last_message = snapshot.values["messages"][-1]
+            for tool_call in last_message.tool_calls:
+                tool_name = tool_call["name"]
+                tool_args = tool_call["args"]
+            
+            print(f"   Tool: {tool_name}")
+            print(f"   Args: {tool_args}")
+            # We use stderr for the prompt so it doesn't get mixed with pipe output if you pipe data later
+            print("Agent wants to execute this command. Approve? (y/n): ", end="", flush=True)
+            user_approval = input()
+        except EOFError:
+            user_approval = "n"
+
+        if user_approval.lower() == 'y':
+            print("Executing...")
+            # Resume execution by passing None
+            for event in agent.stream(None, config=config):
+                if "call_model" in event:
+                    print(f"AI: {event['call_model']['messages'][-1].content}")
+                if "tools" in event:
+                    print(f"Tool Output: {event['tools']['messages'][-1].content}")
+        else:
+            print("Action Cancelled")
 
 if __name__ == "__main__":
     print("Agent Online. Type 'quit' to exit.")
     
     with sqlite3.connect("memory.db", check_same_thread=False) as conn:
-        memory_saver = SqliteSaver(conn)
-        agent = builder.compile(checkpointer=memory_saver,
-                                interrupt_before=["tools"])
-    
-    # This config acts as the "Session ID"
-    # Change 'thread_id' to start a fresh conversation
-    config = {"configurable": {"thread_id": "session_1"}}
-
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() in ["quit", "exit"]:
-            break
-
-        # Stream the output so you see steps as they happen
-        events = agent.stream(
-            {"messages": [HumanMessage(content=user_input)]},
-            config=config
-        )
-
-        for event in events:
-            if "call_model" in event:
-                print(f"AI: {event['call_model']['messages'][-1].content}")
+        memory = SqliteSaver(conn)
         
-        # Human-in-the-Loop
-        snapshot = agent.get_state(config) # If agent is paused
-        if snapshot.next: # contains the name of the next node
-            # Add step asking user for permission
-            user_approval = input("Agent wants to run a command. Approve? (y/n):")
-            if user_approval.lower() == 'y':
-                # Do the action
-                 for event in agent.stream(None, config=config):
-                    if "call_model" in event:
-                        print(f"AI: {event['call_model']['messages'][-1].content}")
-                    if "tools" in event:
-                        print(f"Tool Output: {event['tools']['messages'][-1].content}")
-            else:
-                print("Action Cancelled")
+        # Compile with interrupt
+        agent = builder.compile(checkpointer=memory, interrupt_before=["tools"])
+        
+        # Shared session ID means the agent remembers previous CLI commands!
+        config = {"configurable": {"thread_id": "main_session"}}
+
+        # Are there command line arguments?
+        # sys.argv[0] is the script name, sys.argv[1:] are the arguments
+        if len(sys.argv) > 1:
+            # CLI MODE: User typed "ai create a file..."
+            query = " ".join(sys.argv[1:])
+            run_chat(query, agent, config)
+        else:
+            # INTERACTIVE MODE: User just typed "bashagent"
+            print("Bash Agent Online. Type 'quit' to exit.")
+            while True:
+                try:
+                    user_input = input("You: ")
+                    if user_input.lower() in ["quit", "exit"]:
+                        break
+                    run_chat(user_input, agent, config)
+                except KeyboardInterrupt:
+                    break
+
