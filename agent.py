@@ -49,7 +49,7 @@ builder.add_conditional_edges(
     tools_condition,
 )
 
-builder.add_edge("call_tool", "call_model")
+builder.add_edge("tools", "call_model")
 
 
 if __name__ == "__main__":
