@@ -1,2 +1,5 @@
 BashAgent.code-workspace
 env/
+memory.db
+memory.db-shm
+memory.db-wal

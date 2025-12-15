@@ -23,3 +23,17 @@ def execute_shell_command(command: str) -> str:
         return output if output.strip() else "Command executed succesfully with no ouput."
     except Exception as e:
         return f"Failed to execute command: {str(e)}"
+
+@tool
+def write_to_file(filepath: str, content: str) -> str:
+    """
+    Writes content to a file. Overwrites if it exists.
+    Useful for creating scripts or saving code.
+    """
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return f"Successfully wrote to {filepath}"
+    except Exception as e:
+        return f"Error writing file: {str(e)}"

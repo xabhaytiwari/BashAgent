@@ -7,12 +7,12 @@ from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
-from tools import execute_shell_command
+from tools import execute_shell_command, write_to_file
 
 # Tools (Import from tools.py) {Later}
-tools = [execute_shell_command]
+tools = [execute_shell_command, write_to_file]
 
 # State Definition
 class AgentState(TypedDict):
@@ -28,6 +28,21 @@ llm_with_tools = llm.bind_tools(tools)
 # "Brain" Node
 def call_model(state: AgentState):
     """The main node that talks to the LLM"""
+    # dynamic context
+    cwd = os.getcwd()
+    os_info = os.name
+
+    system_prompt = SystemMessage(content=f"""
+    You are a Bash Agent running on {os_info}.
+    Current Working Directory: {cwd}
+    
+    When asked to perform tasks, generate the appropriate shell commands.
+    Always check the output of your commands.
+    """)
+
+    # Prepend system message to history
+    messages = [system_prompt] + state["messages"]
+
     return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
 # "Tools" Node
@@ -53,7 +68,7 @@ builder.add_edge("tools", "call_model")
 
 
 if __name__ == "__main__":
-    print("🤖 Agent Online. Type 'quit' to exit.")
+    print("Agent Online. Type 'quit' to exit.")
     
     with sqlite3.connect("memory.db", check_same_thread=False) as conn:
         memory_saver = SqliteSaver(conn)
