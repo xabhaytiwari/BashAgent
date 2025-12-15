@@ -1,5 +1,8 @@
+#!/usr/bin/env python
 import os
 import sqlite3
+from dotenv import load_dotenv
+load_dotenv()
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
