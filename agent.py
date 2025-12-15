@@ -9,10 +9,10 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
-
+from tools import execute_shell_command
 
 # Tools (Import from tools.py) {Later}
-tools = []
+tools = [execute_shell_command]
 
 # State Definition
 class AgentState(TypedDict):
@@ -31,15 +31,16 @@ def call_model(state: AgentState):
     return {"messages": [llm_with_tools.invoke(state["messages"])]}
 
 # "Tools" Node
-def call_tool(state: AgentState):
-    """Will add functionality later"""
+# def call_tool(state: AgentState):
+   # """Will add functionality later"""
+tool_node = ToolNode(tools)
 # I will add others later
 
 # Graph Builder
 builder = StateGraph(AgentState)
 
 builder.add_node("call_model", call_model)
-builder.add_node("call_tool", call_tool)
+builder.add_node("tools", tool_node)
 builder.add_edge(START, "call_model")
 
 # Conditional edge: If LLM asks for a tool -> go to 'tools', else -> END
@@ -50,17 +51,13 @@ builder.add_conditional_edges(
 
 builder.add_edge("call_tool", "call_model")
 
-memory = MemorySaver()
-
-# Compile the graph
-agent = builder.compile(chechpointer=memory)
 
 if __name__ == "__main__":
     print("🤖 Agent Online. Type 'quit' to exit.")
     
     with sqlite3.connect("memory.db", check_same_thread=False) as conn:
-        memory = SqliteSaver(conn)
-        agent = builder.compile(checkpointer=memory)
+        memory_saver = SqliteSaver(conn)
+        agent = builder.compile(checkpointer=memory_saver)
     
     # This config acts as the "Session ID"
     # Change 'thread_id' to start a fresh conversation
