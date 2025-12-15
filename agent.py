@@ -15,6 +15,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from tools import execute_shell_command, write_to_file
 
+# Styling (sundarta is important!)
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+from rich.status import Status
+
 # Tools (Import from tools.py) {Later}
 tools = [execute_shell_command, write_to_file]
 
@@ -70,47 +76,66 @@ builder.add_conditional_edges(
 
 builder.add_edge("tools", "call_model")
 
+console = Console()
+
 def run_chat(user_input, agent, config):
     """
     Handles a single turn of coversation, including the Human-in-the-Loop check.
     """
-    events = agent.stream(
-        {"messages": [HumanMessage(content=user_input)]},
-        config=config
-    )
+    # Divide the execution in phases, to be modular with "Styling"
 
-    for event in events:
-        if "call_model" in event:
-            print(f"AI: {event['call_model']['messages'][-1].content}")
- 
-        # Human-in-the-Loop
+    # Initial Exectuion (Thinking Phase)
+    # Spinner (Ashwin Anna)
+
+    with console.status("[bold green]Thinking...", spinner="dots"):    
+        events = agent.stream(
+            {"messages": [HumanMessage(content=user_input)]},
+            config=config
+        )
+        
+        ai_response =""
+        for event in events:
+            if "call_model" in event:
+                ai_response = event['call_model']['messages'][-1].content
+
+    if ai_response:
+        console.print(Panel(Markdown(ai_response)), title="AI", border_style="blue")
+
+    # Human-in-the-Loop (Approval Phase)
     snapshot = agent.get_state(config) # If agent is paused
     if snapshot.next: # contains the name of the next node
         # Add step asking user for permission
         try:
             last_message = snapshot.values["messages"][-1]
+            console.print("\n[bold yellow] Agent Paused. Planned Actions:[/bold yellow]")
             for tool_call in last_message.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
             
-            print(f"   Tool: {tool_name}")
-            print(f"   Args: {tool_args}")
+            console.print(f"   Tool: {tool_call['name']}")
+            console.print(f"   Args: {tool_call['args']}")
             # We use stderr for the prompt so it doesn't get mixed with pipe output if you pipe data later
             print("Agent wants to execute this command. Approve? (y/n): ", end="", flush=True)
             user_approval = input()
         except EOFError:
             user_approval = "n"
 
+        # Doing Phase
         if user_approval.lower() == 'y':
-            print("Executing...")
+            with console.status("[bold red]Executing...", spinner="grenade"):
             # Resume execution by passing None
-            for event in agent.stream(None, config=config):
-                if "call_model" in event:
-                    print(f"AI: {event['call_model']['messages'][-1].content}")
-                if "tools" in event:
-                    print(f"Tool Output: {event['tools']['messages'][-1].content}")
+                for event in agent.stream(None, config=config):
+                    if "call_model" in event:
+                        response = event['call_model']['messages'][-1].content
+                        console.print(Panel(Markdown(response), title="AI", border_style="blue"))
+                    if "tools" in event:
+                        # Tool Output
+                        output = event['tools']['messages'][-1].content
+                        # Truncate long outputs for display to avoid flooding terminal
+                        display_output = output[:500] + "..." if len(output) > 500 else output
+                        console.print(Panel(display_output, title="⚙️ Tool Output", border_style="dim white"))
         else:
-            print("Action Cancelled")
+            console.print("[bold red] Uh Oh, Action Cancelled[/bold red]")
 
 if __name__ == "__main__":
     print("Agent Online. Type 'quit' to exit.")
