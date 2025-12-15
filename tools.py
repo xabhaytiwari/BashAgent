@@ -7,11 +7,6 @@ def execute_shell_command(command: str) -> str:
     """
     Executes a shell comman in the Git Bash/terminal environment.
     Use this to list files, read contents, or run scripts.
-    
-    :param command: Description
-    :type command: str
-    :return: Description
-    :rtype: str
     """
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True)
