@@ -46,8 +46,14 @@ def call_model(state: AgentState):
     You are a Bash Agent running on {os_info}.
     Current Working Directory: {cwd}
     
-    When asked to perform tasks, generate the appropriate shell commands.
-    Always check the output of your commands.
+    Your capabilities:
+    1. You can execute shell commands directly.
+    2. You should prefer using 'ls', 'cat', 'grep' to explore before acting.
+    3. If a command fails, analyze the error and try a different approach.
+
+    Format requirements:
+    - When writing code, provide the filename clearly.
+    - Keep responses concise and actionable..
     """)
 
     # Prepend system message to history
